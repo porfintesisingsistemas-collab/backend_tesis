@@ -15,13 +15,29 @@ function buildBodies(code: string): { text: string; html: string } {
   return { text, html };
 }
 
+/** Render inyecta RENDER=true. Gmail SMTP suele hacer ETIMEDOUT ahi; solo Resend (HTTPS) es fiable. */
+function isRenderHost(): boolean {
+  return process.env.RENDER === "true";
+}
+
 export function isMailConfigured(): boolean {
   if (process.env.RESEND_API_KEY?.trim()) {
     return true;
   }
+  if (isRenderHost()) {
+    return false;
+  }
   const user = process.env.SMTP_USER?.trim();
   const pass = process.env.SMTP_PASS?.trim();
   return Boolean(user && pass);
+}
+
+/** Mensaje para 503 cuando no hay correo configurado. */
+export function mailConfigErrorMessage(): string {
+  if (isRenderHost()) {
+    return "Configura RESEND_API_KEY en Render (resend.com). Gmail SMTP no funciona en este servidor.";
+  }
+  return "El servidor no tiene configurado el envio de correo (SMTP o RESEND_API_KEY).";
 }
 
 async function sendViaResend(toEmail: string, code: string): Promise<void> {
@@ -58,6 +74,12 @@ export async function sendRegistrationCode(
   if (process.env.RESEND_API_KEY?.trim()) {
     await sendViaResend(toEmail, code);
     return;
+  }
+
+  if (isRenderHost()) {
+    throw new Error(
+      "RESEND_API_KEY requerido en Render (SMTP no disponible en este entorno).",
+    );
   }
 
   const user = process.env.SMTP_USER?.trim();

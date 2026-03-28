@@ -3,7 +3,11 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { isUdlaEmail, normalizeUdlaEmail } from "./emailUdla.js";
 import { pool } from "./db.js";
-import { isMailConfigured, sendRegistrationCode } from "./mail.js";
+import {
+  isMailConfigured,
+  mailConfigErrorMessage,
+  sendRegistrationCode,
+} from "./mail.js";
 import { createRegistrationJwt, verifyRegistrationJwt } from "./regJwt.js";
 
 const GENEROS = new Set([
@@ -26,7 +30,7 @@ authRouter.post("/register/send-code", async (req, res) => {
   if (!isMailConfigured()) {
     res.status(503).json({
       ok: false,
-      message: "El servidor no tiene configurado el envio de correo (SMTP).",
+      message: mailConfigErrorMessage(),
     });
     return;
   }
