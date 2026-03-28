@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { Resend } from "resend";
 
 const brand = "TesisAmazonia";
 
@@ -42,28 +43,24 @@ export function mailConfigErrorMessage(): string {
 
 async function sendViaResend(toEmail: string, code: string): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY!.trim();
+  const resend = new Resend(apiKey);
   const from =
-    process.env.MAIL_FROM?.trim() ?? `TesisAmazonia <onboarding@resend.dev>`;
+    process.env.MAIL_FROM?.trim() ?? "TesisAmazonia <onboarding@resend.dev>";
   const { text, html } = buildBodies(code);
 
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: [toEmail],
-      subject: `Codigo de verificacion - ${brand}`,
-      text,
-      html,
-    }),
+  const { data, error } = await resend.emails.send({
+    from,
+    to: toEmail,
+    subject: `Codigo de verificacion - ${brand}`,
+    text,
+    html,
   });
 
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Resend ${res.status}: ${body}`);
+  if (error) {
+    throw new Error(error.message);
+  }
+  if (!data?.id) {
+    throw new Error("Resend no devolvio id de correo");
   }
 }
 

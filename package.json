@@ -16,7 +16,8 @@
     "express": "^4.21.2",
     "jose": "^6.2.2",
     "nodemailer": "^6.10.0",
-    "pg": "^8.20.0"
+    "pg": "^8.20.0",
+    "resend": "^6.9.4"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
