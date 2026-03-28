@@ -10,9 +10,13 @@ import {
 } from "./mail.js";
 import { createRegistrationJwt, verifyRegistrationJwt } from "./regJwt.js";
 
-/** Registro sin correo ni codigo (guardar directo en BD). Quitar o poner false para reactivar verificacion por email. */
+/**
+ * Registro sin correo ni codigo (un solo POST /auth/register).
+ * Por defecto activado: asi Render/Vercel funcionan sin olvidar la variable.
+ * Pon SKIP_EMAIL_VERIFICATION=false en el entorno para volver al flujo con codigo por email.
+ */
 const SKIP_EMAIL_VERIFICATION =
-  process.env.SKIP_EMAIL_VERIFICATION === "true";
+  process.env.SKIP_EMAIL_VERIFICATION !== "false";
 
 const GENEROS = new Set([
   "masculino",
