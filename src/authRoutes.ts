@@ -10,6 +10,10 @@ import {
 } from "./mail.js";
 import { createRegistrationJwt, verifyRegistrationJwt } from "./regJwt.js";
 
+/** Registro sin correo ni codigo (guardar directo en BD). Quitar o poner false para reactivar verificacion por email. */
+const SKIP_EMAIL_VERIFICATION =
+  process.env.SKIP_EMAIL_VERIFICATION === "true";
+
 const GENEROS = new Set([
   "masculino",
   "femenino",
@@ -20,6 +24,15 @@ const GENEROS = new Set([
 export const authRouter = Router();
 
 authRouter.post("/register/send-code", async (req, res) => {
+  if (SKIP_EMAIL_VERIFICATION) {
+    res.status(503).json({
+      ok: false,
+      message:
+        "Verificacion por correo deshabilitada temporalmente. Usa el registro en un solo paso.",
+    });
+    return;
+  }
+
   const { email: rawEmail } = req.body as { email?: unknown };
 
   if (typeof rawEmail !== "string") {
@@ -69,10 +82,22 @@ authRouter.post("/register/send-code", async (req, res) => {
     });
   } catch (err) {
     console.error("[auth] send-code:", err);
+    const detail = err instanceof Error ? err.message : "";
+    if (
+      detail.includes("verify a domain") ||
+      detail.includes("testing emails to your own email")
+    ) {
+      res.status(503).json({
+        ok: false,
+        message:
+          "Falta verificar un dominio en Resend (resend.com/domains) y usar MAIL_FROM con ese dominio. Con onboarding@resend.dev solo se puede probar enviando a la cuenta de Resend.",
+      });
+      return;
+    }
     res.status(502).json({
       ok: false,
       message:
-        "No se pudo enviar el correo. Verifica SMTP o intenta de nuevo mas tarde.",
+        "No se pudo enviar el correo. Revisa la configuracion o intenta mas tarde.",
     });
   }
 });
@@ -90,21 +115,38 @@ authRouter.post("/register", async (req, res) => {
     registrationToken,
   } = req.body as Record<string, unknown>;
 
-  if (
-    typeof rawEmail !== "string" ||
-    typeof nombre !== "string" ||
-    typeof genero !== "string" ||
-    typeof celular !== "string" ||
-    typeof programa !== "string" ||
-    typeof password !== "string" ||
-    typeof verificationCode !== "string" ||
-    typeof registrationToken !== "string"
-  ) {
-    res.status(400).json({
-      ok: false,
-      message: "Faltan campos o el formato no es valido.",
-    });
-    return;
+  if (SKIP_EMAIL_VERIFICATION) {
+    if (
+      typeof rawEmail !== "string" ||
+      typeof nombre !== "string" ||
+      typeof genero !== "string" ||
+      typeof celular !== "string" ||
+      typeof programa !== "string" ||
+      typeof password !== "string"
+    ) {
+      res.status(400).json({
+        ok: false,
+        message: "Faltan campos o el formato no es valido.",
+      });
+      return;
+    }
+  } else {
+    if (
+      typeof rawEmail !== "string" ||
+      typeof nombre !== "string" ||
+      typeof genero !== "string" ||
+      typeof celular !== "string" ||
+      typeof programa !== "string" ||
+      typeof password !== "string" ||
+      typeof verificationCode !== "string" ||
+      typeof registrationToken !== "string"
+    ) {
+      res.status(400).json({
+        ok: false,
+        message: "Faltan campos o el formato no es valido.",
+      });
+      return;
+    }
   }
 
   const email = normalizeUdlaEmail(rawEmail);
@@ -150,23 +192,45 @@ authRouter.post("/register", async (req, res) => {
     return;
   }
 
-  const codeDigits = verificationCode.replace(/\D/g, "");
-  if (codeDigits.length !== 6) {
-    res.status(400).json({
-      ok: false,
-      message: "El codigo de verificacion debe tener 6 digitos.",
-    });
-    return;
+  if (!SKIP_EMAIL_VERIFICATION) {
+    const codeDigits = String(verificationCode).replace(/\D/g, "");
+    if (codeDigits.length !== 6) {
+      res.status(400).json({
+        ok: false,
+        message: "El codigo de verificacion debe tener 6 digitos.",
+      });
+      return;
+    }
+
+    try {
+      const tokenCheck = await verifyRegistrationJwt(
+        String(registrationToken).trim(),
+        email,
+        codeDigits,
+      );
+      if (!tokenCheck.ok) {
+        res.status(400).json({ ok: false, message: tokenCheck.message });
+        return;
+      }
+    } catch {
+      res.status(400).json({
+        ok: false,
+        message: "Token de verificacion invalido o expirado.",
+      });
+      return;
+    }
   }
 
   try {
-    const tokenCheck = await verifyRegistrationJwt(
-      registrationToken.trim(),
-      email,
-      codeDigits,
+    const { rows: dup } = await pool.query<{ id: number }>(
+      "SELECT id FROM users WHERE email = $1 LIMIT 1",
+      [email],
     );
-    if (!tokenCheck.ok) {
-      res.status(400).json({ ok: false, message: tokenCheck.message });
+    if (dup.length > 0) {
+      res.status(409).json({
+        ok: false,
+        message: "Ya existe una cuenta con ese correo.",
+      });
       return;
     }
 

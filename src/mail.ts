@@ -1,3 +1,8 @@
+/**
+ * Envio de correo (codigo de registro). Solo se usa si SKIP_EMAIL_VERIFICATION=false
+ * y el cliente llama a POST /auth/register/send-code.
+ * Con SKIP_EMAIL_VERIFICATION=true estas funciones no se invocan.
+ */
 import nodemailer from "nodemailer";
 import { Resend } from "resend";
 
@@ -16,7 +21,6 @@ function buildBodies(code: string): { text: string; html: string } {
   return { text, html };
 }
 
-/** Render inyecta RENDER=true. Gmail SMTP suele hacer ETIMEDOUT ahi; solo Resend (HTTPS) es fiable. */
 function isRenderHost(): boolean {
   return process.env.RENDER === "true";
 }
@@ -33,7 +37,6 @@ export function isMailConfigured(): boolean {
   return Boolean(user && pass);
 }
 
-/** Mensaje para 503 cuando no hay correo configurado. */
 export function mailConfigErrorMessage(): string {
   if (isRenderHost()) {
     return "Configura RESEND_API_KEY en Render (resend.com). Gmail SMTP no funciona en este servidor.";
