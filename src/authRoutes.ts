@@ -296,7 +296,7 @@ authRouter.post("/login", async (req, res) => {
 
   try {
     const { rows } = await pool.query<{
-      id: number;
+      id: number | string;
       password_hash: string;
       nombre: string;
       email: string;
@@ -316,10 +316,16 @@ authRouter.post("/login", async (req, res) => {
       return;
     }
 
+    const userId = Number(row.id);
+    if (!Number.isFinite(userId)) {
+      res.status(500).json({ ok: false, message: "No se pudo leer el id del usuario." });
+      return;
+    }
+
     res.json({
       ok: true,
       message: "Sesion iniciada con exito.",
-      userId: row.id,
+      userId,
       nombre: row.nombre ?? "",
       email: row.email ?? email,
     });
