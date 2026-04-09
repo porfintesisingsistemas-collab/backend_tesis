@@ -6,9 +6,15 @@ import { pool } from "./db.js";
 import {
   isMailConfigured,
   mailConfigErrorMessage,
+  sendPasswordResetCode,
   sendRegistrationCode,
 } from "./mail.js";
-import { createRegistrationJwt, verifyRegistrationJwt } from "./regJwt.js";
+import {
+  createPasswordResetJwt,
+  createRegistrationJwt,
+  verifyPasswordResetJwt,
+  verifyRegistrationJwt,
+} from "./regJwt.js";
 
 const SKIP_EMAIL_VERIFICATION = process.env.SKIP_EMAIL_VERIFICATION !== "false";
 const GENEROS = new Set(["masculino", "femenino", "otro", "prefiero_no_decir"]);
@@ -555,6 +561,129 @@ authRouter.post("/register", async (req, res) => {
   }
 });
 
+authRouter.post("/password/send-code", async (req, res) => {
+  const { email: rawEmail } = req.body as Record<string, unknown>;
+  if (typeof rawEmail !== "string") {
+    res.status(400).json({ ok: false, message: "El correo es obligatorio." });
+    return;
+  }
+  const email = normalizeUdlaEmail(rawEmail);
+  if (!isUdlaEmail(email)) {
+    res.status(400).json({
+      ok: false,
+      message: "El correo debe ser institucional (@udla.edu.co).",
+    });
+    return;
+  }
+  if (!isMailConfigured()) {
+    res.status(503).json({ ok: false, message: mailConfigErrorMessage() });
+    return;
+  }
+
+  try {
+    const { rows } = await pool.query<{ id: number }>(
+      "SELECT id FROM users WHERE email = $1 LIMIT 1",
+      [email],
+    );
+    // Mensaje neutro para no filtrar si existe o no.
+    if (rows.length === 0) {
+      res.json({
+        ok: true,
+        message:
+          "Si el correo existe, enviamos un codigo para cambiar la contrasena.",
+      });
+      return;
+    }
+
+    const code = crypto.randomInt(0, 1_000_000).toString().padStart(6, "0");
+    const passwordResetToken = await createPasswordResetJwt(email, code);
+    await sendPasswordResetCode(email, code);
+    res.json({
+      ok: true,
+      message:
+        "Si el correo existe, enviamos un codigo para cambiar la contrasena.",
+      passwordResetToken,
+    });
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "No se pudo enviar el codigo.";
+    res.status(500).json({ ok: false, message });
+  }
+});
+
+authRouter.post("/password/reset", async (req, res) => {
+  const {
+    email: rawEmail,
+    verificationCode,
+    passwordResetToken,
+    newPassword,
+  } = req.body as Record<string, unknown>;
+
+  if (
+    typeof rawEmail !== "string" ||
+    typeof verificationCode !== "string" ||
+    typeof passwordResetToken !== "string" ||
+    typeof newPassword !== "string"
+  ) {
+    res.status(400).json({ ok: false, message: "Datos incompletos." });
+    return;
+  }
+
+  const email = normalizeUdlaEmail(rawEmail);
+  if (!isUdlaEmail(email)) {
+    res.status(400).json({
+      ok: false,
+      message: "El correo debe ser institucional (@udla.edu.co).",
+    });
+    return;
+  }
+  if (newPassword.length < 8) {
+    res.status(400).json({
+      ok: false,
+      message: "La contrasena debe tener al menos 8 caracteres.",
+    });
+    return;
+  }
+  const codeDigits = verificationCode.replace(/\D/g, "");
+  if (codeDigits.length !== 6) {
+    res.status(400).json({
+      ok: false,
+      message: "El codigo de verificacion debe tener 6 digitos.",
+    });
+    return;
+  }
+
+  const tokenCheck = await verifyPasswordResetJwt(
+    passwordResetToken.trim(),
+    email,
+    codeDigits,
+  );
+  if (!tokenCheck.ok) {
+    res.status(400).json({ ok: false, message: tokenCheck.message });
+    return;
+  }
+
+  try {
+    const hash = await bcrypt.hash(newPassword, 10);
+    const updated = await pool.query<{ id: number | string }>(
+      `UPDATE users
+       SET password_hash = $2
+       WHERE email = $1
+       RETURNING id`,
+      [email, hash],
+    );
+    if (updated.rows.length === 0) {
+      res.status(404).json({ ok: false, message: "Usuario no encontrado." });
+      return;
+    }
+    res.json({ ok: true, message: "Contrasena actualizada correctamente." });
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "No se pudo actualizar la contrasena.";
+    res.status(500).json({ ok: false, message });
+  }
+});
+
 authRouter.post("/login", async (req, res) => {
   const { email: rawEmail, password } = req.body as Record<string, unknown>;
 
@@ -720,6 +849,7 @@ authRouter.get("/dashboard", async (req, res) => {
         id: number | string;
         titulo: string;
         descripcion: string;
+        review_topic: string;
         dificultad: string;
         due_date: string | null;
         class_name: string;
@@ -730,6 +860,7 @@ authRouter.get("/dashboard", async (req, res) => {
            e.id,
            e.titulo,
            e.descripcion,
+           e.review_topic,
            e.dificultad,
            e.due_date,
            e.coins_reward,
@@ -845,6 +976,7 @@ authRouter.get("/dashboard", async (req, res) => {
             id: Number(row.id),
             titulo: row.titulo,
             descripcion: row.descripcion,
+            reviewTopic: row.review_topic,
             dificultad: row.dificultad,
             dueDate: row.due_date,
             className: row.class_name,
@@ -919,6 +1051,7 @@ authRouter.get("/dashboard", async (req, res) => {
       id: number | string;
       titulo: string;
       descripcion: string;
+      review_topic: string;
       dificultad: string;
       due_date: string | null;
       class_name: string;
@@ -929,6 +1062,7 @@ authRouter.get("/dashboard", async (req, res) => {
          e.id,
          e.titulo,
          e.descripcion,
+         e.review_topic,
          e.dificultad,
          e.due_date,
          c.nombre AS class_name,
@@ -1062,6 +1196,7 @@ authRouter.get("/dashboard", async (req, res) => {
           id: Number(row.id),
           titulo: row.titulo,
           descripcion: row.descripcion,
+          reviewTopic: row.review_topic,
           dificultad: row.dificultad,
           dueDate: row.due_date,
           className: row.class_name,
@@ -1081,6 +1216,115 @@ authRouter.get("/dashboard", async (req, res) => {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error al cargar el panel.";
+    res.status(500).json({ ok: false, message });
+  }
+});
+
+authRouter.post("/professor/create-student", async (req, res) => {
+  const {
+    professorId,
+    email: rawEmail,
+    nombre,
+    genero,
+    celular,
+    programa,
+    semestre,
+    password,
+    matricula,
+  } = req.body as Record<string, unknown>;
+
+  const normalizedProfessorId = normalizeUserId(professorId);
+  if (normalizedProfessorId === null) {
+    res.status(400).json({ ok: false, message: "professorId es requerido." });
+    return;
+  }
+  if (
+    typeof rawEmail !== "string" ||
+    typeof nombre !== "string" ||
+    typeof genero !== "string" ||
+    typeof celular !== "string" ||
+    typeof programa !== "string" ||
+    typeof password !== "string"
+  ) {
+    res.status(400).json({ ok: false, message: "Faltan campos obligatorios." });
+    return;
+  }
+
+  const professor = await getUserById(normalizedProfessorId);
+  if (!professor || parseRole(professor.role) !== "profesor") {
+    res.status(403).json({ ok: false, message: "Solo un profesor puede crear estudiantes." });
+    return;
+  }
+
+  const email = normalizeUdlaEmail(rawEmail);
+  if (!isUdlaEmail(email)) {
+    res.status(400).json({ ok: false, message: "El correo debe ser @udla.edu.co" });
+    return;
+  }
+  if (!GENEROS.has(genero)) {
+    res.status(400).json({ ok: false, message: "Genero no valido." });
+    return;
+  }
+  const sem = Number(semestre);
+  if (!Number.isInteger(sem) || sem < 1 || sem > 20) {
+    res.status(400).json({ ok: false, message: "Semestre invalido." });
+    return;
+  }
+  if (password.length < 8) {
+    res.status(400).json({ ok: false, message: "La contrasena debe tener minimo 8 caracteres." });
+    return;
+  }
+  const mat = parseMatricula(matricula);
+  if (mat === "__invalid__") {
+    res.status(400).json({ ok: false, message: "Matricula no valida." });
+    return;
+  }
+
+  try {
+    const hash = await bcrypt.hash(password, 10);
+    const result = await pool.query<{ id: number | string }>(
+      `INSERT INTO users (email, nombre, genero, celular, programa, semestre, role, password_hash, matricula)
+       VALUES ($1, $2, $3, $4, $5, $6, 'estudiante', $7, $8)
+       RETURNING id`,
+      [
+        email,
+        nombre.trim(),
+        genero,
+        celular.trim(),
+        programa.trim(),
+        sem,
+        hash,
+        mat,
+      ],
+    );
+    const studentId = Number(result.rows[0]?.id ?? 0);
+    if (studentId > 0) {
+      await createNotification(
+        pool,
+        studentId,
+        "Cuenta creada por docente",
+        `Tu docente creo tu cuenta. Ya puedes iniciar sesion con ${email}.`,
+        "account_created",
+      );
+    }
+    res.status(201).json({
+      ok: true,
+      message: "Estudiante creado correctamente.",
+      studentId,
+    });
+  } catch (err: unknown) {
+    const code =
+      err && typeof err === "object" && "code" in err
+        ? String((err as { code: string }).code)
+        : "";
+    if (code === "23505") {
+      res.status(409).json({
+        ok: false,
+        message: "Ya existe un usuario con ese correo o matricula.",
+      });
+      return;
+    }
+    const message = err instanceof Error ? err.message : "Error al crear estudiante.";
     res.status(500).json({ ok: false, message });
   }
 });
@@ -1471,6 +1715,7 @@ authRouter.post("/exercises", async (req, res) => {
     dueDate,
     coinsReward: rawCoins,
     xpReward: rawXp,
+    reviewTopic: rawReviewTopic,
   } = req.body as Record<string, unknown>;
   const normalizedProfessorId = normalizeUserId(professorId);
   const normalizedClassId = normalizeUserId(classId);
@@ -1480,6 +1725,7 @@ authRouter.post("/exercises", async (req, res) => {
   const normalizedDueDate = normalizeDueDate(dueDate);
   const coinsReward = parseNonNegativeInt(rawCoins, 0);
   const xpReward = parseNonNegativeInt(rawXp, 0);
+  const reviewTopic = typeof rawReviewTopic === "string" ? rawReviewTopic.trim() : "";
 
   if (normalizedProfessorId === null || normalizedClassId === null) {
     res.status(400).json({ ok: false, message: "professorId y classId son requeridos." });
@@ -1517,8 +1763,8 @@ authRouter.post("/exercises", async (req, res) => {
 
     await client.query("BEGIN");
     const exerciseResult = await client.query<{ id: number | string }>(
-      `INSERT INTO exercises (class_id, professor_id, titulo, descripcion, dificultad, due_date, coins_reward, xp_reward)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO exercises (class_id, professor_id, titulo, descripcion, dificultad, due_date, coins_reward, xp_reward, review_topic)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING id`,
       [
         normalizedClassId,
@@ -1529,6 +1775,7 @@ authRouter.post("/exercises", async (req, res) => {
         normalizedDueDate,
         coinsReward,
         xpReward,
+        reviewTopic,
       ],
     );
     const exerciseId = Number(exerciseResult.rows[0]?.id ?? 0);

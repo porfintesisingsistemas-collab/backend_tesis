@@ -3,6 +3,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { errors as joseErrors } from "jose";
 
 const AUD = "registro";
+const AUD_PASSWORD_RESET = "password_reset";
 const ISS = "integrales-amazonia";
 
 let cachedKey: Uint8Array | null = null;
@@ -97,6 +98,72 @@ export async function verifyRegistrationJwt(
       ok: false,
       message:
         "Token de registro invalido o vencido. Solicita un codigo nuevo.",
+    };
+  }
+}
+
+export async function createPasswordResetJwt(
+  email: string,
+  code: string,
+): Promise<string> {
+  const key = getSigningKey();
+  const proof = proofHex(email, code);
+
+  return await new SignJWT({ proof })
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject(email)
+    .setAudience(AUD_PASSWORD_RESET)
+    .setIssuer(ISS)
+    .setExpirationTime("15m")
+    .sign(key);
+}
+
+export async function verifyPasswordResetJwt(
+  token: string,
+  email: string,
+  codeDigits: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const { payload } = await jwtVerify(token, getSigningKey(), {
+      audience: AUD_PASSWORD_RESET,
+      issuer: ISS,
+      algorithms: ["HS256"],
+    });
+
+    const sub = typeof payload.sub === "string" ? payload.sub : "";
+    if (sub !== email) {
+      return {
+        ok: false,
+        message:
+          "El token no coincide con el correo. Vuelve a solicitar el codigo.",
+      };
+    }
+
+    const proof = payload.proof;
+    if (typeof proof !== "string") {
+      return { ok: false, message: "Token de cambio de contrasena invalido." };
+    }
+
+    const expectedBuf = Buffer.from(proofHex(email, codeDigits), "hex");
+    const proofBuf = Buffer.from(proof, "hex");
+    if (expectedBuf.length !== proofBuf.length) {
+      return { ok: false, message: "Codigo de verificacion incorrecto." };
+    }
+    if (!timingSafeEqual(expectedBuf, proofBuf)) {
+      return { ok: false, message: "Codigo de verificacion incorrecto." };
+    }
+
+    return { ok: true };
+  } catch (err) {
+    if (err instanceof joseErrors.JWTExpired) {
+      return {
+        ok: false,
+        message: "El codigo expiro. Solicita uno nuevo.",
+      };
+    }
+    return {
+      ok: false,
+      message: "Token de cambio de contrasena invalido o vencido.",
     };
   }
 }

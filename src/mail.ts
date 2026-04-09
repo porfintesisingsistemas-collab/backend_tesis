@@ -111,3 +111,76 @@ export async function sendRegistrationCode(
     html,
   });
 }
+
+function buildResetBodies(code: string): { text: string; html: string } {
+  const text = `Hola,\n\nRecibimos una solicitud para cambiar tu contrasena.\nTu codigo es: ${code}\n\nEs valido por 15 minutos.\n\nSi no fuiste tu, ignora este correo.\n\n— ${brand}`;
+  const html = `<div style="font-family:Segoe UI,Roboto,Arial,sans-serif;max-width:480px;margin:0;padding:24px;background:#0f1629;color:#e8ecff;">
+  <p style="margin:0 0 8px;font-size:13px;letter-spacing:0.06em;text-transform:uppercase;color:#7ad8ff;">${brand}</p>
+  <h1 style="margin:0 0 12px;font-size:20px;font-weight:700;color:#ffffff;">Restablecer contrasena</h1>
+  <p style="margin:0 0 20px;font-size:15px;line-height:1.5;color:#b8c0df;">Usa este codigo para cambiar tu contrasena. Caduca en 15 minutos.</p>
+  <p style="margin:0 0 8px;font-size:14px;color:#b8c0df;">Tu codigo es:</p>
+  <p style="margin:0 0 24px;font-size:28px;font-weight:700;letter-spacing:0.35em;color:#5ec8ff;">${code}</p>
+  <p style="margin:0;font-size:13px;line-height:1.5;color:#8b95b5;">Si no solicitaste este cambio, ignora este mensaje.</p>
+</div>`;
+  return { text, html };
+}
+
+export async function sendPasswordResetCode(
+  toEmail: string,
+  code: string,
+): Promise<void> {
+  if (process.env.RESEND_API_KEY?.trim()) {
+    const apiKey = process.env.RESEND_API_KEY!.trim();
+    const resend = new Resend(apiKey);
+    const from =
+      process.env.MAIL_FROM?.trim() ?? "TesisAmazonia <onboarding@resend.dev>";
+    const { text, html } = buildResetBodies(code);
+    const { data, error } = await resend.emails.send({
+      from,
+      to: toEmail,
+      subject: `Codigo para cambiar contrasena - ${brand}`,
+      text,
+      html,
+    });
+    if (error) {
+      throw new Error(error.message);
+    }
+    if (!data?.id) {
+      throw new Error("Resend no devolvio id de correo");
+    }
+    return;
+  }
+
+  if (isRenderHost()) {
+    throw new Error(
+      "RESEND_API_KEY requerido en Render (SMTP no disponible en este entorno).",
+    );
+  }
+
+  const user = process.env.SMTP_USER?.trim();
+  const pass = process.env.SMTP_PASS?.trim();
+  if (!user || !pass) {
+    throw new Error("SMTP no configurado");
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST ?? "smtp.gmail.com",
+    port: Number(process.env.SMTP_PORT ?? 587),
+    secure: process.env.SMTP_SECURE === "true",
+    auth: { user, pass },
+    connectionTimeout: 25_000,
+    greetingTimeout: 25_000,
+    socketTimeout: 25_000,
+  });
+
+  const from =
+    process.env.MAIL_FROM?.trim() ?? `TesisAmazonia <${user}>`;
+  const { text, html } = buildResetBodies(code);
+  await transporter.sendMail({
+    from,
+    to: toEmail,
+    subject: `Codigo para cambiar contrasena - ${brand}`,
+    text,
+    html,
+  });
+}

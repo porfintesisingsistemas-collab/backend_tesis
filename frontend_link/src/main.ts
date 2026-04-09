@@ -58,6 +58,7 @@ type ProfessorExercise = {
   id: number;
   titulo: string;
   descripcion: string;
+  reviewTopic: string;
   dificultad: string;
   dueDate: string | null;
   className: string;
@@ -87,6 +88,7 @@ type StudentExercise = {
   id: number;
   titulo: string;
   descripcion: string;
+  reviewTopic: string;
   dificultad: string;
   dueDate: string | null;
   className: string;
@@ -283,6 +285,9 @@ app.innerHTML = `
             </label>
 
             <button class="btn btn-primary auth-submit" type="submit">Acceder</button>
+            <button type="button" class="link-like link-like-center" id="forgot-password-btn">
+              ¿Olvidaste tu contrasena?
+            </button>
           </form>
         </div>
 
@@ -445,6 +450,54 @@ app.innerHTML = `
         <section id="professor-panel" class="role-panel hidden">
           <div class="dashboard-two-columns">
             <article class="panel-card">
+              <h3 class="panel-title">Crear estudiante</h3>
+              <p class="panel-subtitle">Crea cuenta con contrasena inicial para tu estudiante.</p>
+              <form id="create-student-form" class="panel-form panel-form-grid" novalidate>
+                <p id="create-student-message" class="auth-message hidden" role="alert"></p>
+                <label class="auth-field">
+                  <span>Correo institucional</span>
+                  <input type="email" name="email" placeholder="estudiante@udla.edu.co" required />
+                </label>
+                <label class="auth-field">
+                  <span>Nombre completo</span>
+                  <input type="text" name="nombre" placeholder="Nombre del estudiante" required />
+                </label>
+                <label class="auth-field">
+                  <span>Genero</span>
+                  <select name="genero" required>
+                    <option value="masculino">Masculino</option>
+                    <option value="femenino">Femenino</option>
+                    <option value="otro">Otro</option>
+                    <option value="prefiero_no_decir">Prefiero no decir</option>
+                  </select>
+                </label>
+                <label class="auth-field">
+                  <span>Celular</span>
+                  <input type="tel" name="celular" placeholder="3001234567" required />
+                </label>
+                <label class="auth-field">
+                  <span>Programa</span>
+                  <input type="text" name="programa" placeholder="Programa academico" required />
+                </label>
+                <label class="auth-field">
+                  <span>Semestre</span>
+                  <input type="number" name="semestre" min="1" max="20" step="1" value="1" required />
+                </label>
+                <label class="auth-field">
+                  <span>Matricula (opcional)</span>
+                  <input type="text" name="matricula" maxlength="32" />
+                </label>
+                <label class="auth-field">
+                  <span>Contrasena inicial</span>
+                  <input type="password" name="password" minlength="8" placeholder="Minimo 8 caracteres" required />
+                </label>
+                <button class="btn btn-primary btn-block auth-field-span-full" type="submit">
+                  Crear estudiante
+                </button>
+              </form>
+            </article>
+
+            <article class="panel-card">
               <h3 class="panel-title">Crear clase</h3>
               <p class="panel-subtitle">Organiza grupos y cupos sin salir del panel.</p>
               <form id="create-class-form" class="panel-form" novalidate>
@@ -496,7 +549,7 @@ app.innerHTML = `
 
           <article class="panel-card">
             <h3 class="panel-title">Crear ejercicio</h3>
-            <p class="panel-subtitle">Publica actividades y dispara notificaciones para tus estudiantes.</p>
+            <p class="panel-subtitle">Publica actividades, define tema de repaso y dispara notificaciones.</p>
             <form id="create-exercise-form" class="panel-form panel-form-grid" novalidate>
               <p id="create-exercise-message" class="auth-message hidden" role="alert"></p>
               <label class="auth-field">
@@ -526,6 +579,10 @@ app.innerHTML = `
               <label class="auth-field">
                 <span>XP al completar</span>
                 <input type="number" name="xpReward" min="0" max="100000" step="1" value="0" />
+              </label>
+              <label class="auth-field auth-field-span-full">
+                <span>Tema de repaso (opcional)</span>
+                <input type="text" name="reviewTopic" placeholder="Ej. Integracion por partes" maxlength="180" />
               </label>
               <label class="auth-field auth-field-span-full">
                 <span>Descripcion</span>
@@ -598,6 +655,7 @@ const registerPanel = document.querySelector<HTMLElement>("#register-panel");
 const registerStepData = document.querySelector<HTMLElement>("#register-step-data");
 const registerStepVerify = document.querySelector<HTMLElement>("#register-step-verify");
 const loginForm = document.querySelector<HTMLFormElement>("#login-form");
+const forgotPasswordBtn = document.querySelector<HTMLButtonElement>("#forgot-password-btn");
 const registerDataForm = document.querySelector<HTMLFormElement>("#register-data-form");
 const authMessage = document.querySelector<HTMLParagraphElement>("#auth-message");
 const registerDataMessage = document.querySelector<HTMLParagraphElement>("#register-data-message");
@@ -636,6 +694,8 @@ const professorPanel = document.querySelector<HTMLElement>("#professor-panel");
 const studentPanel = document.querySelector<HTMLElement>("#student-panel");
 const createClassForm = document.querySelector<HTMLFormElement>("#create-class-form");
 const createClassMessage = document.querySelector<HTMLParagraphElement>("#create-class-message");
+const createStudentForm = document.querySelector<HTMLFormElement>("#create-student-form");
+const createStudentMessage = document.querySelector<HTMLParagraphElement>("#create-student-message");
 const enrollStudentForm = document.querySelector<HTMLFormElement>("#enroll-student-form");
 const enrollStudentMessage = document.querySelector<HTMLParagraphElement>("#enroll-student-message");
 const createExerciseForm = document.querySelector<HTMLFormElement>("#create-exercise-form");
@@ -1156,6 +1216,11 @@ function renderProfessorDashboard(data: DashboardResponse): void {
                     <span class="list-chip">${escapeHtml(formatDifficulty(exercise.dificultad))}</span>
                   </div>
                   <p class="list-card-text">${escapeHtml(exercise.descripcion || "Sin descripcion")}</p>
+                  ${
+                    exercise.reviewTopic
+                      ? `<div class="list-card-meta"><span class="topic-chip">Tema de repaso: ${escapeHtml(exercise.reviewTopic)}</span></div>`
+                      : ""
+                  }
                   <div class="list-card-meta">
                     <span>${escapeHtml(exercise.className)}</span>
                     <span>${escapeHtml(formatDate(exercise.dueDate))}</span>
@@ -1265,6 +1330,11 @@ function renderStudentDashboard(data: DashboardResponse): void {
                     <span class="list-chip">${escapeHtml(exerciseStatusLabel(exercise.status))}</span>
                   </div>
                   <p class="list-card-text">${escapeHtml(exercise.descripcion || "Sin descripcion")}</p>
+                  ${
+                    exercise.reviewTopic
+                      ? `<div class="list-card-meta"><span class="topic-chip">Tema de repaso: ${escapeHtml(exercise.reviewTopic)}</span></div>`
+                      : ""
+                  }
                   <div class="list-card-meta">
                     <span>${escapeHtml(exercise.className)}</span>
                     <span>${escapeHtml(formatDifficulty(exercise.dificultad))}</span>
@@ -1728,6 +1798,67 @@ loginForm?.addEventListener("submit", async (event) => {
   }
 });
 
+forgotPasswordBtn?.addEventListener("click", async () => {
+  const emailInput = window.prompt("Ingresa tu correo institucional (@udla.edu.co):", "");
+  if (!emailInput) {
+    return;
+  }
+  const email = emailInput.trim().toLowerCase();
+  if (!isUdlaEmailClient(email)) {
+    showInlineMessage(authMessage, "El correo debe ser institucional: @udla.edu.co", "error");
+    return;
+  }
+
+  try {
+    const sendData = await requestJson<{ message?: string; passwordResetToken?: string }>(
+      "/auth/password/send-code",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      },
+    );
+    const token = sendData.passwordResetToken;
+    if (!token) {
+      showInlineMessage(
+        authMessage,
+        sendData.message ?? "Si el correo existe, revisa tu bandeja de entrada.",
+        "success",
+      );
+      return;
+    }
+    const code = window.prompt("Ingresa el codigo de 6 digitos que recibiste por correo:", "");
+    if (!code) {
+      return;
+    }
+    const newPassword = window.prompt("Ingresa tu nueva contrasena (minimo 8 caracteres):", "");
+    if (!newPassword) {
+      return;
+    }
+    const resetData = await requestJson<{ message?: string }>("/auth/password/reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        verificationCode: code,
+        passwordResetToken: token,
+        newPassword,
+      }),
+    });
+    showInlineMessage(
+      authMessage,
+      resetData.message ?? "Contrasena actualizada. Ya puedes iniciar sesion.",
+      "success",
+    );
+  } catch (error) {
+    showInlineMessage(
+      authMessage,
+      error instanceof Error ? error.message : "No se pudo cambiar la contrasena.",
+      "error",
+    );
+  }
+});
+
 notificationsTrigger?.addEventListener("click", (event) => {
   event.stopPropagation();
   closeUserMenu();
@@ -1767,6 +1898,56 @@ notificationsList?.addEventListener("click", async (event) => {
     await loadDashboard();
   } catch {
     button.disabled = false;
+  }
+});
+
+createStudentForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const session = getUserSession();
+  if (!session || session.role !== "profesor" || !createStudentForm) {
+    return;
+  }
+  const formData = new FormData(createStudentForm);
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const password = String(formData.get("password") ?? "");
+  if (!isUdlaEmailClient(email)) {
+    showInlineMessage(createStudentMessage, "El correo debe ser institucional: @udla.edu.co", "error");
+    return;
+  }
+  if (password.length < 8) {
+    showInlineMessage(createStudentMessage, "La contrasena debe tener al menos 8 caracteres.", "error");
+    return;
+  }
+  const submitButton = createStudentForm.querySelector<HTMLButtonElement>('button[type="submit"]');
+  submitButton?.setAttribute("disabled", "");
+  showInlineMessage(createStudentMessage, "", "");
+  try {
+    const data = await requestJson<{ message?: string }>("/auth/professor/create-student", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        professorId: session.userId,
+        email,
+        nombre: String(formData.get("nombre") ?? "").trim(),
+        genero: String(formData.get("genero") ?? ""),
+        celular: String(formData.get("celular") ?? "").trim(),
+        programa: String(formData.get("programa") ?? "").trim(),
+        semestre: Number(formData.get("semestre") ?? 1),
+        matricula: String(formData.get("matricula") ?? "").trim(),
+        password,
+      }),
+    });
+    createStudentForm.reset();
+    showInlineMessage(createStudentMessage, data.message ?? "Estudiante creado correctamente.", "success");
+    await loadDashboard();
+  } catch (error) {
+    showInlineMessage(
+      createStudentMessage,
+      error instanceof Error ? error.message : "No se pudo crear el estudiante.",
+      "error",
+    );
+  } finally {
+    submitButton?.removeAttribute("disabled");
   }
 });
 
@@ -1910,6 +2091,7 @@ createExerciseForm?.addEventListener("submit", async (event) => {
         dueDate: String(formData.get("dueDate") ?? "").trim(),
         coinsReward: Number(formData.get("coinsReward") ?? 0),
         xpReward: Number(formData.get("xpReward") ?? 0),
+        reviewTopic: String(formData.get("reviewTopic") ?? "").trim(),
       }),
     });
     createExerciseForm.reset();

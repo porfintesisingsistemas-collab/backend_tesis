@@ -885,6 +885,18 @@ h1 span {
   font-size: 0.76rem;
 }
 
+.topic-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.32rem 0.62rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 203, 86, 0.35);
+  background: rgba(255, 203, 86, 0.11);
+  color: #ffd989;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
 .notification-read-btn {
   border: 0;
   background: transparent;
@@ -923,6 +935,28 @@ h1 span {
   border: 1px solid rgba(111, 128, 178, 0.22);
   border-radius: 1rem;
   box-shadow: 0 24px 56px rgba(2, 5, 14, 0.46);
+}
+
+#professor-panel .panel-card {
+  border-color: rgba(8, 216, 199, 0.26);
+  box-shadow:
+    0 24px 56px rgba(2, 5, 14, 0.46),
+    0 0 0 1px rgba(8, 216, 199, 0.08);
+}
+
+#professor-panel .panel-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+#professor-panel .panel-title::before {
+  content: "";
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--primary), #6ab7ff);
+  box-shadow: 0 0 10px rgba(8, 216, 199, 0.55);
 }
 
 .dashboard-banner {
