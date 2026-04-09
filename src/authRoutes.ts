@@ -850,6 +850,7 @@ authRouter.get("/dashboard", async (req, res) => {
         titulo: string;
         descripcion: string;
         review_topic: string;
+        graph_latex: string;
         dificultad: string;
         due_date: string | null;
         class_name: string;
@@ -861,6 +862,7 @@ authRouter.get("/dashboard", async (req, res) => {
            e.titulo,
            e.descripcion,
            e.review_topic,
+           e.graph_latex,
            e.dificultad,
            e.due_date,
            e.coins_reward,
@@ -977,6 +979,7 @@ authRouter.get("/dashboard", async (req, res) => {
             titulo: row.titulo,
             descripcion: row.descripcion,
             reviewTopic: row.review_topic,
+            graphLatex: row.graph_latex ?? "",
             dificultad: row.dificultad,
             dueDate: row.due_date,
             className: row.class_name,
@@ -1052,6 +1055,7 @@ authRouter.get("/dashboard", async (req, res) => {
       titulo: string;
       descripcion: string;
       review_topic: string;
+      graph_latex: string;
       dificultad: string;
       due_date: string | null;
       class_name: string;
@@ -1063,6 +1067,7 @@ authRouter.get("/dashboard", async (req, res) => {
          e.titulo,
          e.descripcion,
          e.review_topic,
+         e.graph_latex,
          e.dificultad,
          e.due_date,
          c.nombre AS class_name,
@@ -1197,6 +1202,7 @@ authRouter.get("/dashboard", async (req, res) => {
           titulo: row.titulo,
           descripcion: row.descripcion,
           reviewTopic: row.review_topic,
+          graphLatex: row.graph_latex ?? "",
           dificultad: row.dificultad,
           dueDate: row.due_date,
           className: row.class_name,
@@ -1716,6 +1722,7 @@ authRouter.post("/exercises", async (req, res) => {
     coinsReward: rawCoins,
     xpReward: rawXp,
     reviewTopic: rawReviewTopic,
+    graphLatex: rawGraphLatex,
   } = req.body as Record<string, unknown>;
   const normalizedProfessorId = normalizeUserId(professorId);
   const normalizedClassId = normalizeUserId(classId);
@@ -1726,6 +1733,10 @@ authRouter.post("/exercises", async (req, res) => {
   const coinsReward = parseNonNegativeInt(rawCoins, 0);
   const xpReward = parseNonNegativeInt(rawXp, 0);
   const reviewTopic = typeof rawReviewTopic === "string" ? rawReviewTopic.trim() : "";
+  let graphLatex = typeof rawGraphLatex === "string" ? rawGraphLatex.trim() : "";
+  if (graphLatex.length > 4000) {
+    graphLatex = graphLatex.slice(0, 4000);
+  }
 
   if (normalizedProfessorId === null || normalizedClassId === null) {
     res.status(400).json({ ok: false, message: "professorId y classId son requeridos." });
@@ -1763,8 +1774,8 @@ authRouter.post("/exercises", async (req, res) => {
 
     await client.query("BEGIN");
     const exerciseResult = await client.query<{ id: number | string }>(
-      `INSERT INTO exercises (class_id, professor_id, titulo, descripcion, dificultad, due_date, coins_reward, xp_reward, review_topic)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO exercises (class_id, professor_id, titulo, descripcion, dificultad, due_date, coins_reward, xp_reward, review_topic, graph_latex)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING id`,
       [
         normalizedClassId,
@@ -1776,6 +1787,7 @@ authRouter.post("/exercises", async (req, res) => {
         coinsReward,
         xpReward,
         reviewTopic,
+        graphLatex,
       ],
     );
     const exerciseId = Number(exerciseResult.rows[0]?.id ?? 0);

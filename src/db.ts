@@ -204,6 +204,9 @@ export async function initializeAppSchema(): Promise<void> {
       "ALTER TABLE exercises ADD COLUMN IF NOT EXISTS review_topic VARCHAR(180) NOT NULL DEFAULT ''",
     );
     await client.query(
+      "ALTER TABLE exercises ADD COLUMN IF NOT EXISTS graph_latex TEXT NOT NULL DEFAULT ''",
+    );
+    await client.query(
       "ALTER TABLE users DROP CONSTRAINT IF EXISTS chk_users_coins_nonnegative",
     );
     await client.query(
